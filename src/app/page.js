@@ -17,6 +17,9 @@ export default function Page() {
   const [roomId, setRoomId] = useState("");
   const [role, setRole] = useState("viewer");
   const [positions, setPositions] = useState({});
+  const [connStatus, setConnStatus] = useState("disconnected"); // NEW
+  const [joined, setJoined] = useState(false);
+
   const ablyRef = useRef(null);
   const channelRef = useRef(null);
   const canvasRef = useRef(null);
@@ -24,6 +27,12 @@ export default function Page() {
 
   useEffect(() => {
     const client = new Ably.Realtime({ authUrl: "/api/ably-token" });
+
+    client.connection.on("connecting", () => setConnStatus("connecting"));
+    client.connection.on("connected", () => setConnStatus("connected"));
+    client.connection.on("disconnected", () => setConnStatus("disconnected"));
+    client.connection.on("failed", () => setConnStatus("failed"));
+
     ablyRef.current = client;
     return () => client.close();
   }, []);
@@ -32,13 +41,12 @@ export default function Page() {
     if (!roomId) return alert("Enter a room id");
     const channel = ablyRef.current.channels.get(`room:${roomId}`);
     channelRef.current = channel;
+    setJoined(true);
 
-    // Subscribe to incoming position updates
     channel.subscribe("pos", (msg) => {
       setPositions((prev) => ({ ...prev, [msg.clientId]: msg.data }));
     });
 
-    // If this client should publish its own position:
     if ("geolocation" in navigator) {
       navigator.geolocation.watchPosition(
         (pos) => {
@@ -101,7 +109,6 @@ export default function Page() {
     ctx.fill();
     ctx.restore();
 
-    // Draw host at center, others relative
     const host = Object.values(positions).find((p) => p.role === "host");
     if (host) {
       ctx.fillStyle = "#ffd";
@@ -133,12 +140,56 @@ export default function Page() {
 
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
-      <div style={{ padding: 10, background: "#001022", color: "#9fe" }}>
-        Room:{" "}
+      {/* Header */}
+      <header
+        style={{
+          padding: 10,
+          background: "#001022",
+          color: "#9fe",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <div style={{ fontWeight: "bold" }}>📡 Radar</div>
+        <div>
+          Status:{" "}
+          <span
+            style={{
+              color:
+                connStatus === "connected"
+                  ? "#0f0"
+                  : connStatus === "connecting"
+                  ? "#ff0"
+                  : "#f55",
+            }}
+          >
+            {connStatus}
+          </span>
+        </div>
+        {joined && (
+          <div>
+            Room: <b>{roomId}</b> ({role})
+          </div>
+        )}
+      </header>
+
+      {/* Controls */}
+      <div
+        style={{
+          padding: 10,
+          background: "#071126",
+          color: "#9fe",
+          display: "flex",
+          gap: 12,
+          alignItems: "center",
+        }}
+      >
         <input
           value={roomId}
           onChange={(e) => setRoomId(e.target.value)}
-          placeholder="room id"
+          placeholder="Room ID"
+          style={{ padding: "4px 8px" }}
         />
         <label>
           <input
@@ -156,8 +207,12 @@ export default function Page() {
           />{" "}
           Viewer
         </label>
-        <button onClick={joinRoom}>Join</button>
+        <button onClick={joinRoom} style={{ padding: "4px 10px" }}>
+          Join
+        </button>
       </div>
+
+      {/* Radar */}
       <main style={{ flex: 1 }}>
         <canvas
           ref={canvasRef}
