@@ -17,7 +17,7 @@ export default function Page() {
   const [roomId, setRoomId] = useState("");
   const [role, setRole] = useState("viewer");
   const [positions, setPositions] = useState({});
-  const [connStatus, setConnStatus] = useState("disconnected"); // NEW
+  const [connStatus, setConnStatus] = useState("disconnected");
   const [joined, setJoined] = useState(false);
 
   const ablyRef = useRef(null);
@@ -60,7 +60,6 @@ export default function Page() {
         (err) => console.warn("geolocation error", err),
         { enableHighAccuracy: false, maximumAge: 10000, timeout: 20000 }
       );
-
     }
 
     requestAnimationFrame(loop);
@@ -145,12 +144,15 @@ export default function Page() {
       {/* Header */}
       <header
         style={{
-          padding: 10,
+          padding: "8px 12px",
           background: "#001022",
           color: "#9fe",
           display: "flex",
+          flexWrap: "wrap",
           justifyContent: "space-between",
           alignItems: "center",
+          fontSize: "14px",
+          gap: "6px",
         }}
       >
         <div style={{ fontWeight: "bold" }}>📡 Radar</div>
@@ -162,15 +164,15 @@ export default function Page() {
                 connStatus === "connected"
                   ? "#0f0"
                   : connStatus === "connecting"
-                    ? "#ff0"
-                    : "#f55",
+                  ? "#ff0"
+                  : "#f55",
             }}
           >
             {connStatus}
           </span>
         </div>
         {joined && (
-          <div>
+          <div style={{ fontSize: "13px" }}>
             Room: <b>{roomId}</b> ({role})
           </div>
         )}
@@ -179,21 +181,23 @@ export default function Page() {
       {/* Controls */}
       <div
         style={{
-          padding: 10,
+          padding: "8px 12px",
           background: "#071126",
           color: "#9fe",
           display: "flex",
-          gap: 12,
+          flexWrap: "wrap",
+          gap: "8px",
           alignItems: "center",
+          fontSize: "14px",
         }}
       >
         <input
           value={roomId}
           onChange={(e) => setRoomId(e.target.value)}
           placeholder="Room ID"
-          style={{ padding: "4px 8px" }}
+          style={{ padding: "6px 8px", flex: "1 1 120px" }}
         />
-        <label>
+        <label style={{ whiteSpace: "nowrap" }}>
           <input
             type="radio"
             checked={role === "host"}
@@ -201,7 +205,7 @@ export default function Page() {
           />{" "}
           Host
         </label>
-        <label>
+        <label style={{ whiteSpace: "nowrap" }}>
           <input
             type="radio"
             checked={role === "viewer"}
@@ -209,16 +213,30 @@ export default function Page() {
           />{" "}
           Viewer
         </label>
-        <button onClick={joinRoom} style={{ padding: "4px 10px" }}>
+        <button
+          onClick={joinRoom}
+          style={{
+            padding: "6px 12px",
+            background: "#114",
+            color: "#9fe",
+            border: "1px solid #39f",
+            borderRadius: "4px",
+          }}
+        >
           Join
         </button>
       </div>
 
       {/* Radar */}
-      <main style={{ flex: 1 }}>
+      <main style={{ flex: 1, minHeight: 0 }}>
         <canvas
           ref={canvasRef}
-          style={{ width: "100%", height: "100%", background: "#071126" }}
+          style={{
+            width: "100%",
+            height: "100%",
+            background: "#071126",
+            display: "block",
+          }}
         />
       </main>
     </div>
