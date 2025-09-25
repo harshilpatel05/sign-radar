@@ -50,6 +50,7 @@ export default function Page() {
     if ("geolocation" in navigator) {
       navigator.geolocation.watchPosition(
         (pos) => {
+          console.log("📍 Publishing position", pos.coords.latitude, pos.coords.longitude);
           channel.publish("pos", {
             role,
             lat: pos.coords.latitude,
@@ -59,6 +60,7 @@ export default function Page() {
         (err) => console.warn("geolocation error", err),
         { enableHighAccuracy: false, maximumAge: 10000, timeout: 20000 }
       );
+
     }
 
     requestAnimationFrame(loop);
@@ -160,8 +162,8 @@ export default function Page() {
                 connStatus === "connected"
                   ? "#0f0"
                   : connStatus === "connecting"
-                  ? "#ff0"
-                  : "#f55",
+                    ? "#ff0"
+                    : "#f55",
             }}
           >
             {connStatus}
