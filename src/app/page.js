@@ -1,103 +1,169 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useRef, useState } from "react";
+import * as Ably from "ably";
+
+function latLonDeltaToMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const latAvg = ((lat1 + lat2) / 2) * (Math.PI / 180);
+  const x = dLon * Math.cos(latAvg) * R;
+  const y = dLat * R;
+  return { x, y };
+}
+
+export default function Page() {
+  const [roomId, setRoomId] = useState("");
+  const [role, setRole] = useState("viewer");
+  const [positions, setPositions] = useState({});
+  const ablyRef = useRef(null);
+  const channelRef = useRef(null);
+  const canvasRef = useRef(null);
+  const sweepRef = useRef(0);
+
+  useEffect(() => {
+    const client = new Ably.Realtime({ authUrl: "/api/ably-token" });
+    ablyRef.current = client;
+    return () => client.close();
+  }, []);
+
+  function joinRoom() {
+    if (!roomId) return alert("Enter a room id");
+    const channel = ablyRef.current.channels.get(`room:${roomId}`);
+    channelRef.current = channel;
+
+    // Subscribe to incoming position updates
+    channel.subscribe("pos", (msg) => {
+      setPositions((prev) => ({ ...prev, [msg.clientId]: msg.data }));
+    });
+
+    // If this client should publish its own position:
+    if ("geolocation" in navigator) {
+      navigator.geolocation.watchPosition(
+        (pos) => {
+          channel.publish("pos", {
+            role,
+            lat: pos.coords.latitude,
+            lon: pos.coords.longitude,
+          });
+        },
+        (err) => console.warn("geolocation error", err),
+        { enableHighAccuracy: false, maximumAge: 10000, timeout: 20000 }
+      );
+    }
+
+    requestAnimationFrame(loop);
+  }
+
+  function loop() {
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext("2d");
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      drawRadar(ctx);
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function drawRadar(ctx) {
+    const c = ctx.canvas;
+    const cx = c.width / 2;
+    const cy = c.height / 2;
+    const radius = Math.min(c.width, c.height) * 0.42;
+
+    ctx.fillStyle = "#071126";
+    ctx.fillRect(0, 0, c.width, c.height);
+
+    ctx.strokeStyle = "rgba(100,200,255,0.12)";
+    for (let i = 1; i <= 4; i++) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, (radius * i) / 4, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    sweepRef.current += 0.01;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(sweepRef.current);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, radius, -Math.PI / 18, Math.PI / 18);
+    ctx.closePath();
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
+    g.addColorStop(0, "rgba(120,220,255,0.25)");
+    g.addColorStop(1, "rgba(120,220,255,0.03)");
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.restore();
+
+    // Draw host at center, others relative
+    const host = Object.values(positions).find((p) => p.role === "host");
+    if (host) {
+      ctx.fillStyle = "#ffd";
+      ctx.font = "12px monospace";
+      ctx.fillText("Host", cx + 8, cy - 8);
+
+      const maxRange = 200;
+      const scale = radius / maxRange;
+
+      for (const [id, pos] of Object.entries(positions)) {
+        if (pos.role === "host") continue;
+        const d = latLonDeltaToMeters(host.lat, host.lon, pos.lat, pos.lon);
+        const px = cx + d.x * scale;
+        const py = cy - d.y * scale;
+
+        ctx.beginPath();
+        ctx.fillStyle = "#0f9";
+        ctx.arc(px, py, 6, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#9ff";
+        ctx.fillText(id.slice(0, 4), px + 8, py - 6);
+      }
+    } else {
+      ctx.fillStyle = "#99d";
+      ctx.fillText("Waiting for host position...", 20, c.height - 30);
+    }
+  }
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+      <div style={{ padding: 10, background: "#001022", color: "#9fe" }}>
+        Room:{" "}
+        <input
+          value={roomId}
+          onChange={(e) => setRoomId(e.target.value)}
+          placeholder="room id"
         />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.js
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
+        <label>
+          <input
+            type="radio"
+            checked={role === "host"}
+            onChange={() => setRole("host")}
+          />{" "}
+          Host
+        </label>
+        <label>
+          <input
+            type="radio"
+            checked={role === "viewer"}
+            onChange={() => setRole("viewer")}
+          />{" "}
+          Viewer
+        </label>
+        <button onClick={joinRoom}>Join</button>
+      </div>
+      <main style={{ flex: 1 }}>
+        <canvas
+          ref={canvasRef}
+          style={{ width: "100%", height: "100%", background: "#071126" }}
+        />
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
     </div>
   );
 }
